@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
 const tradeSchema = new Schema({
-    securityName: String,
+    tickerSymbol: String,
     type: String,
     quantity: Number,
     price: Number,

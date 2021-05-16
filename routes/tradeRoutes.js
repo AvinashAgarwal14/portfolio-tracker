@@ -1,9 +1,11 @@
 const mongoose = require('mongoose');
 const Trades = mongoose.model('trades');
 const Portfolio = mongoose.model('portfolio');
+const {validationResult} = require('express-validator');
+const { addTradeValidator, updateTradeValidator } = require('../utils/validation');
 
 module.exports  = (app) => {
-    app.get('/trade', async (req, res) => {
+    app.get('/api/trades', async (req, res) => {
         try {
             let trades = await Trades.find({});
             res.send(trades);
@@ -12,15 +14,17 @@ module.exports  = (app) => {
         }
     });
 
-    app.post('/trade', async (req, res) => {
-        const {securityName, type, quantity, price} = req.body;
-        const session = await mongoose.startSession();
-        session.startTransaction();
+    app.post('/api/trades', addTradeValidator, async (req, res) => {
+        const errors = validationResult(req);
+        if(!errors.isEmpty()){
+            return res.status(400).json({ errors: errors.array() })
+        }
+        const {tickerSymbol, type, quantity, price} = req.body;
         try {
-            const portfolioToUpdate = await Portfolio.find({securityName: securityName});
-            if(portfolioToUpdate.length){
-                let portfolioQuantity = portfolioToUpdate[0].quantity;
-                let portfolioAvgPrice = portfolioToUpdate[0].avgPrice;
+            const portfolioToUpdate = await Portfolio.findOne({tickerSymbol: tickerSymbol});
+            if(portfolioToUpdate){
+                let portfolioQuantity = portfolioToUpdate.quantity;
+                let portfolioAvgPrice = portfolioToUpdate.avgPrice;
                 if(type === "SELL" && quantity > portfolioQuantity) {
                     throw "Insufficeint Quanity";
                 }
@@ -28,13 +32,13 @@ module.exports  = (app) => {
                     portfolioAvgPrice = (portfolioAvgPrice*portfolioQuantity + price*quantity)/(portfolioQuantity+quantity);
                     portfolioQuantity += quantity;
                 }
-                if(type == "SELL") {
+                if(type === "SELL") {
                     portfolioQuantity -= quantity;
                 }
-                await Trades.create({securityName, type, quantity, price});
+                await Trades.create({tickerSymbol, type, quantity, price});
                 await Portfolio.updateOne(
                     {
-                        securityName: securityName
+                        tickerSymbol: tickerSymbol
                     },
                     {
                         quantity: portfolioQuantity,
@@ -42,28 +46,28 @@ module.exports  = (app) => {
                     }
                 );
             } else {
-                if(type == "SELL") {
+                if(type === "SELL") {
                     throw "Insufficeint Quanity";
                 }
-                await Trades.create({securityName, type, quantity, price});
-                await Portfolio.create({securityName, quantity, avgPrice: price});
+                await Trades.create({tickerSymbol, type, quantity, price});
+                await Portfolio.create({tickerSymbol, quantity, avgPrice: price});
             }
-            await session.commitTransaction();
-            session.endSession();
             res.sendStatus(200);
         } catch (err) {
-            await session.abortTransaction();
-            session.endSession();
-            res.status(400).send({error: err.message});
+            res.status(400).send({error: err.message || err });
         }
     });
 
-    app.put('/trade/:tradeId', async (req, res) => {
+    app.put('/api/trades/:tradeId', updateTradeValidator, async (req, res) => {
+        const errors = validationResult(req);
+        if(!errors.isEmpty()){
+            return res.status(400).json({ errors: errors.array() })
+        }
         const tradeId = req.params.tradeId;
-        const {securityName, type, quantity, price} = req.body;
+        const {type, quantity, price} = req.body;
         try {
             let tradeToUpdate = (await Trades.find({_id: tradeId}))[0];
-            let portfolioToUpdate = (await Portfolio.find({securityName: tradeToUpdate.securityName}))[0];
+            let portfolioToUpdate = (await Portfolio.find({tickerSymbol: tradeToUpdate.tickerSymbol}))[0];
             if(tradeToUpdate.type === 'BUY') {
                 if(portfolioToUpdate.quantity === tradeToUpdate.quantity)
                     portfolioToUpdate.avgPrice = 0;
@@ -88,21 +92,17 @@ module.exports  = (app) => {
             }
             await tradeToUpdate.save();
             await portfolioToUpdate.save();
-            await session.commitTransaction();
-            session.endSession();
             res.sendStatus(200);
         } catch (err) {
-            await session.abortTransaction();
-            session.endSession();
-            res.status(400).send({error: err.message});
+            res.status(400).send({error: err.message || err });
         }
     });
 
-    app.delete('/trade/:tradeId', async (req, res) => {
+    app.delete('/api/trades/:tradeId', async (req, res) => {
         const tradeId = req.params.tradeId;
         try {
             const tradeToDelete = (await Trades.find({_id: tradeId}))[0];
-            let portfolioToUpdate = (await Portfolio.find({securityName: tradeToDelete.securityName}))[0];
+            let portfolioToUpdate = (await Portfolio.find({tickerSymbol: tradeToDelete.tickerSymbol}))[0];
             if(tradeToDelete.type === 'BUY') {
                 if(portfolioToUpdate.quantity === tradeToDelete.quantity)
                     portfolioToUpdate.avgPrice = 0;
@@ -114,13 +114,16 @@ module.exports  = (app) => {
             }
             await Trades.deleteOne({_id: tradeId});
             await portfolioToUpdate.save();
-            await session.commitTransaction();
-            session.endSession();
             res.sendStatus(200);
         } catch (err) {
-            await session.abortTransaction();
-            session.endSession();
             res.status(400).send({error: err.message});
         }
     });
 }
+
+// const session = await mongoose.startSession();
+// session.startTransaction();
+// await session.commitTransaction();
+// session.endSession();
+// await session.abortTransaction();
+// session.endSession();

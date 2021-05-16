@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const Portfolio = mongoose.model('portfolio');
 
 module.exports  = (app) => {
-    app.get('/portfolio', async (req, res) => {
+    app.get('/api/portfolio', async (req, res) => {
         try {
             let portfolio = await Portfolio.find({});
             res.send(portfolio);

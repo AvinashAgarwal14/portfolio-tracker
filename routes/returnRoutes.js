@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const Portfolio = mongoose.model('portfolio');
 
 module.exports  = (app) => {
-    app.get('/returns', async (req, res) => {
+    app.get('/api/returns', async (req, res) => {
         const currentPrice = 2000;
         try {
             let portfolioReturns = await Portfolio.aggregate(
