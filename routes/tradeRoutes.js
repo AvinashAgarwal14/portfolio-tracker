@@ -13,17 +13,16 @@ module.exports  = (app) => {
     });
 
     app.post('/trade', async (req, res) => {
-        let trade;
-        let updatedPortfolio;
         const {securityName, type, quantity, price} = req.body;
-        const prevPortfolio = await Portfolio.find({securityName: securityName});
+        const session = await mongoose.startSession();
+        session.startTransaction();
         try {
-            if(prevPortfolio.length){
-                let portfolioQuantity = prevPortfolio[0].quantity;
-                let portfolioAvgPrice = prevPortfolio[0].avgPrice;
+            const portfolioToUpdate = await Portfolio.find({securityName: securityName});
+            if(portfolioToUpdate.length){
+                let portfolioQuantity = portfolioToUpdate[0].quantity;
+                let portfolioAvgPrice = portfolioToUpdate[0].avgPrice;
                 if(type === "SELL" && quantity > portfolioQuantity) {
-                    res.status(400).send({error: "Insufficeint Quanity"});
-                    return;
+                    throw "Insufficeint Quanity";
                 }
                 if(type === "BUY") {
                     portfolioAvgPrice = (portfolioAvgPrice*portfolioQuantity + price*quantity)/(portfolioQuantity+quantity);
@@ -32,8 +31,8 @@ module.exports  = (app) => {
                 if(type == "SELL") {
                     portfolioQuantity -= quantity;
                 }
-                trade = await Trades.create({securityName, type, quantity, price});
-                updatedPortfolio = await Portfolio.updateOne(
+                await Trades.create({securityName, type, quantity, price});
+                await Portfolio.updateOne(
                     {
                         securityName: securityName
                     },
@@ -44,14 +43,17 @@ module.exports  = (app) => {
                 );
             } else {
                 if(type == "SELL") {
-                    res.status(400).send({message: "Insufficeint Quanity"});
-                    return;
+                    throw "Insufficeint Quanity";
                 }
-                trade = await Trades.create({securityName, type, quantity, price});
-                updatedPortfolio = await Portfolio.create({securityName, quantity, avgPrice: price});
+                await Trades.create({securityName, type, quantity, price});
+                await Portfolio.create({securityName, quantity, avgPrice: price});
             }
+            await session.commitTransaction();
+            session.endSession();
             res.sendStatus(200);
         } catch (err) {
+            await session.abortTransaction();
+            session.endSession();
             res.status(400).send({error: err.message});
         }
     });
@@ -60,16 +62,38 @@ module.exports  = (app) => {
         const tradeId = req.params.tradeId;
         const {securityName, type, quantity, price} = req.body;
         try {
-            await Trades.updateOne(
-                {
-                    _id: tradeId,
-                },
-                { 
-                    securityName, type, quantity, price
-                }
-            )
+            let tradeToUpdate = (await Trades.find({_id: tradeId}))[0];
+            let portfolioToUpdate = (await Portfolio.find({securityName: tradeToUpdate.securityName}))[0];
+            if(tradeToUpdate.type === 'BUY') {
+                if(portfolioToUpdate.quantity === tradeToUpdate.quantity)
+                    portfolioToUpdate.avgPrice = 0;
+                else
+                    portfolioToUpdate.avgPrice = (portfolioToUpdate.avgPrice*portfolioToUpdate.quantity - tradeToUpdate.price*tradeToUpdate.quantity)/(portfolioToUpdate.quantity-tradeToUpdate.quantity);
+                portfolioToUpdate.quantity -= tradeToUpdate.quantity;
+            } else {
+                portfolioToUpdate.quantity += tradeToUpdate.quantity;
+            }
+            tradeToUpdate.type = type;
+            tradeToUpdate.quantity = quantity;
+            tradeToUpdate.price = price;
+            if(type === "SELL" && quantity > portfolioToUpdate.quantity) {
+                throw "Insufficeint Quanity";
+            }
+            if(type === "BUY") {
+                portfolioToUpdate.avgPrice = (portfolioToUpdate.avgPrice*portfolioToUpdate.quantity + price*quantity)/(portfolioToUpdate.quantity+quantity);
+                portfolioToUpdate.quantity += quantity;
+            }
+            if(type === "SELL") {
+                portfolioToUpdate.quantity -= quantity;
+            }
+            await tradeToUpdate.save();
+            await portfolioToUpdate.save();
+            await session.commitTransaction();
+            session.endSession();
             res.sendStatus(200);
         } catch (err) {
+            await session.abortTransaction();
+            session.endSession();
             res.status(400).send({error: err.message});
         }
     });
@@ -77,13 +101,25 @@ module.exports  = (app) => {
     app.delete('/trade/:tradeId', async (req, res) => {
         const tradeId = req.params.tradeId;
         try {
-            await Trades.deleteOne(
-                {
-                    _id: tradeId,
-                }
-            )
+            const tradeToDelete = (await Trades.find({_id: tradeId}))[0];
+            let portfolioToUpdate = (await Portfolio.find({securityName: tradeToDelete.securityName}))[0];
+            if(tradeToDelete.type === 'BUY') {
+                if(portfolioToUpdate.quantity === tradeToDelete.quantity)
+                    portfolioToUpdate.avgPrice = 0;
+                else
+                    portfolioToUpdate.avgPrice = (portfolioToUpdate.avgPrice*portfolioToUpdate.quantity - tradeToDelete.price*tradeToDelete.quantity)/(portfolioToUpdate.quantity-tradeToDelete.quantity);
+                portfolioToUpdate.quantity -= tradeToDelete.quantity;
+            } else {
+                portfolioToUpdate.quantity += tradeToDelete.quantity;
+            }
+            await Trades.deleteOne({_id: tradeId});
+            await portfolioToUpdate.save();
+            await session.commitTransaction();
+            session.endSession();
             res.sendStatus(200);
         } catch (err) {
+            await session.abortTransaction();
+            session.endSession();
             res.status(400).send({error: err.message});
         }
     });
