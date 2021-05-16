@@ -1,5 +1,13 @@
 ## Portfolio Tracker APIs
 
+### Running the Application Locally
+```
+1. git clone https://github.com/AvinashAgarwal14/portfolio-tracker.git
+2. cd portfolio-tracker
+3. npm install
+4. npm start
+```
+
 ### Endpoints
 
 #### Trades related
