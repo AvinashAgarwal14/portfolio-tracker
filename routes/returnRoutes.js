@@ -2,8 +2,10 @@ const mongoose = require('mongoose');
 const Portfolio = mongoose.model('portfolio');
 
 module.exports  = (app) => {
+    // Endpoint to get the returns
     app.get('/api/returns', async (req, res) => {
-        const currentPrice = 2000;
+        const currentPrice = 100;
+        // Calculate returns based on current price
         try {
             let portfolioReturns = await Portfolio.aggregate(
                 [

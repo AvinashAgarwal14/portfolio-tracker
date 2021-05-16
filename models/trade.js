@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
+// Schema defination for Trades
 const tradeSchema = new Schema({
     tickerSymbol: String,
     type: String,
