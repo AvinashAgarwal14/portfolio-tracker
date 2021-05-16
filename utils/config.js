@@ -1,7 +1,7 @@
 if(process.env.NODE_ENV === 'production') {
     module.exports = {
         PORT: process.env.PORT,
-        MONGO_URL: process.env.MONGO_URL
+        MONGO_URL: process.env.MONGO_URI
     }
 } else {
     module.exports = {
