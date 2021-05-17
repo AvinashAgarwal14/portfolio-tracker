@@ -43,7 +43,7 @@ module.exports  = (app) => {
                 }
                 await Trades.create({tickerSymbol, type, quantity, price});
                 // Remove from Portfolio if quantity is 0
-                if(portfolioToUpdate.quantity === 0){
+                if(portfolioQuantity === 0){
                     await Portfolio.deleteOne({tickerSymbol: portfolioToUpdate.tickerSymbol});
                 } else {
                     await Portfolio.updateOne(
